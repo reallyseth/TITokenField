@@ -437,6 +437,7 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 	NSMutableArray * _tokens;
 	CGPoint _tokenCaret;
     UILabel * _placeHolderLabel;
+    BOOL _tokenIsSymbol;
 }
 @synthesize delegate = delegate;
 @synthesize editable = _editable;
@@ -597,6 +598,32 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 - (void)didChangeText {
 	if (!self.text.length)[self setText:kTextEmpty];
 	[self showOrHidePlaceHolderLabel];
+    
+    // if last character is space, and first is a math symbol, tokenize it
+    if ([[self.text substringFromIndex:(self.text.length - 1)] isEqualToString:@" "] && self.text.length == 3 && self.text)
+    {
+        // /^[$-/:-?{-~!"^_`\[\]]/
+        // use regex to test for math symbol
+        NSError *error;
+        NSRegularExpression *regex = [NSRegularExpression
+                                      regularExpressionWithPattern:@"^[-+*/()%]"
+                                      options:0
+                                      error:&error];
+        
+        NSRange range = [regex rangeOfFirstMatchInString:[self.text substringFromIndex:1]
+                                                   options:0
+                                                     range:NSMakeRange(0, 1)];
+        if (range.location != NSNotFound)
+        {
+            // remove the final space
+            self.text = [self.text substringToIndex:2];
+
+            _tokenIsSymbol = YES;
+            
+            // tokenize the symbol
+            [self tokenizeText];
+        }
+    }
 }
 
 - (void) showOrHidePlaceHolderLabel {
@@ -732,10 +759,11 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 	
 	__block BOOL textChanged = NO;
 	
-	if (![self.text isEqualToString:kTextEmpty] && ![self.text isEqualToString:kTextHidden] && !_forcePickSearchResult){
+	if (![self.text isEqualToString:kTextEmpty] && ![self.text isEqualToString:kTextHidden] && (!_forcePickSearchResult || _tokenIsSymbol)){
 		[[self.text componentsSeparatedByCharactersInSet:_tokenizingCharacters] enumerateObjectsUsingBlock:^(NSString * component, NSUInteger idx, BOOL *stop){
 			[self addTokenWithTitle:[component stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
 			textChanged = YES;
+            _tokenIsSymbol = NO;
 		}];
 	}
 	
